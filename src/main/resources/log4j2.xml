@@ -7,7 +7,13 @@
     </Appenders>
     <Loggers>
         <Root level="info">
-            <AppenderRef ref="Console" />
+            <AppenderRef ref="Console" level="info"/>
         </Root>
+<!--        <Logger name="com.example" level="info">-->
+<!--            <AppenderRef ref="Console" level="info"/>-->
+<!--        </Logger>-->
+<!--        <Logger name="com.example" level="debug">-->
+<!--            <AppenderRef ref="Console"/>-->
+<!--        </Logger>-->
     </Loggers>
 </Configuration>

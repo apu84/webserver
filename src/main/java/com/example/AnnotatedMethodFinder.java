@@ -43,8 +43,7 @@ public class AnnotatedMethodFinder {
     private static Object convertToActualType(String value) {
         try {
             return Integer.parseInt(value);
-        } catch (NumberFormatException ignore) {
-        }
+        } catch (NumberFormatException ignore) {}
         return value;
     }
 
@@ -63,7 +62,7 @@ public class AnnotatedMethodFinder {
                 }
             }
         }
-        throw new NoSuchMethodException(String.format("No method handling value %s found", matchValue));
+        throw new NoSuchMethodException(String.format("No request handler found for %s", matchValue));
     }
 
     private static boolean matches(String pattern, String value) {

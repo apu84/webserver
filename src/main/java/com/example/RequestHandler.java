@@ -1,5 +1,6 @@
 package com.example;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -25,79 +26,66 @@ class RequestHandler implements HttpHandler {
         restControllers = AnnotationClassScanner.findAnnotatedClasses(RestController.class);
     }
 
-    private InstanceMethod findRestControllerMethod(String value, String requestType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        InstanceMethod method;
+    private InstanceMethod findRestControllerMethod(String value, String requestType) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException {
+        InstanceMethod instanceMethod;
         switch (requestType) {
             case "Get":
-                method = findMethod(GetMapping.class, value);
+                instanceMethod = findMethod(GetMapping.class, value);
                 break;
             case "Post":
-                method = findMethod(PostMapping.class, value);
+                instanceMethod = findMethod(PostMapping.class, value);
                 break;
             default:
-                throw new IllegalArgumentException(String.format("No request handler for %s", requestType));
+                throw new NoSuchMethodException(String.format("No request handler for %s", requestType));
         }
-        return method;
+        return instanceMethod;
     }
 
-    private record InstanceMethod(Object instance, Method method) {}
+    private record InstanceMethod(Object instance, Method method) {
+    }
 
-    private InstanceMethod findMethod(Class<? extends Annotation> annotation, String value) {
-        Method method;
+    private InstanceMethod findMethod(Class<? extends Annotation> annotation, String value) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
         for (Class<?> controller : restControllers) {
-            try {
-                var instance = controller.getDeclaredConstructor().newInstance();
-                method = findAnnotatedMethod(controller, annotation, value);
-                return new InstanceMethod(instance, method);
-            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException ignore) {
-            } catch (InstantiationException e) {
-                throw new RuntimeException(e);
-            }
+            var instance = controller.getDeclaredConstructor().newInstance();
+            Method method = findAnnotatedMethod(controller, annotation, value);
+            return new InstanceMethod(instance, method);
         }
-        return null;
+        throw new NoSuchMethodException(String.format("No request handler for %s", value));
     }
 
     @Override
     public void handle(HttpExchange httpExchange) throws IOException {
         logger.info(httpExchange.getRequestURI());
         var requestUri = httpExchange.getRequestURI();
-
         try {
             InstanceMethod instanceMethod = findRestControllerMethod(requestUri.toString(), "Get");
-            if (instanceMethod != null) {
-                Object[] parameters = getAnnotatedParameterValues(instanceMethod.method(), GetMapping.class, requestUri.toString());
-                Object response = instanceMethod.method().invoke(instanceMethod.instance, parameters);
-                String json = null;
-                try {
-                    json = objectMapper.writeValueAsString(response);
-                    logger.info("Serialized response: " + json);
-                    httpExchange.sendResponseHeaders(200, json.length());
-                    OutputStream outputStream = httpExchange.getResponseBody();
-                    outputStream.write(json.getBytes());
-                    outputStream.flush();
-                    outputStream.close();
-                } catch (Exception e) {
-                    var error = e.toString();
-                    httpExchange.sendResponseHeaders(400, error.length());
-                    OutputStream outputStream = httpExchange.getResponseBody();
-                    outputStream.write(error.getBytes());
-                    outputStream.flush();
-                    outputStream.close();
-                }
-            }
-        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignore) {
+            Object[] parameters = getAnnotatedParameterValues(instanceMethod.method(), GetMapping.class, requestUri.toString());
+            Object response = instanceMethod.method().invoke(instanceMethod.instance, parameters);
+            String json = objectMapper.writeValueAsString(response);
+            httpExchange.sendResponseHeaders(HttpCode.OK, json.length());
+            OutputStream outputStream = httpExchange.getResponseBody();
+            outputStream.write(json.getBytes());
+            outputStream.flush();
+            outputStream.close();
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            logger.error(e);
+            sendError(e.toString(), HttpCode.NOT_FOUND, httpExchange);
+        } catch (InstantiationException ie) {
+            logger.error(ie);
+            sendError(ie.toString(), HttpCode.CLIENT_ERROR, httpExchange);
+        } catch (Exception ex) {
+            logger.error(ex);
+            sendError(ex.toString(), HttpCode.SERVER_ERROR, httpExchange);
         }
-//        var primesPath = "/primes/";
-//        var nthPrimePath = "/nth-prime/";
-//        var primesString = "";
-//        if (requestUri.getPath().contains(primesPath)) {
-//            var countString = requestUri.getPath().substring(primesPath.length());
-//            List<Integer> result = primeGenerator.calculatePrime(Integer.parseInt(countString));
-//            primesString = toString(result);
-//        } else if (requestUri.getPath().contains(nthPrimePath)) {
-//            var countString = requestUri.getPath().substring(primesPath.length() + 1);
-//            int result = primeGenerator.nthPrime(Integer.parseInt(countString));
-//            primesString = Integer.toString(result);
-//        }
+    }
+
+    private void sendError(String error,
+                           int errorCode,
+                           HttpExchange httpExchange) throws IOException {
+        httpExchange.sendResponseHeaders(errorCode, error.length());
+        OutputStream outputStream = httpExchange.getResponseBody();
+        outputStream.write(error.getBytes());
+        outputStream.flush();
+        outputStream.close();
     }
 }
