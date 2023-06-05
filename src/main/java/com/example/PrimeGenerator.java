@@ -84,4 +84,12 @@ public class PrimeGenerator {
             return savedPrimes.subList(0, count);
         }
     }
+
+    public Integer nthPrime(Integer count) throws IOException {
+        return calculatePrime(count).get(count-1);
+    }
+
+    public List<Integer> primeRange(Integer first, Integer last) throws IOException {
+        return calculatePrime(last).subList(first, last);
+    }
 }
